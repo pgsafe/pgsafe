@@ -41,7 +41,7 @@ At least one of the following must be set. `CONNNAME` must match `[A-Z0-9]+`.
 | Variable | Description |
 |---|---|
 | `MULTI_<CONNNAME>_DATABASE_URL` | Connect to this PostgreSQL instance and back up **all** databases found in `pg_database` (excluding templates). The URL's database path is used only for the initial connection. |
-| `MULTI_<CONNNAME>_DATABASES_GLOB` | Optional glob pattern (e.g. `app_*`) to filter which databases are backed up for the matching `MULTI_*` connection. Uses standard glob syntax (`*`, `?`, `[abc]`). When absent, all non-template databases are backed up. |
+| `MULTI_<CONNNAME>_DATABASE_NAMES_GLOB` | Optional glob pattern (e.g. `app_*`) to filter which databases are backed up for the matching `MULTI_*` connection. Uses standard glob syntax (`*`, `?`, `[abc]`). When absent, all non-template databases are backed up. |
 | `SINGLE_<CONNNAME>_DATABASE_URL` | Back up **exactly the one** database named in the URL path. |
 
 Multiple variables of either type can be set simultaneously; pgsafe will back up all of them.
@@ -55,7 +55,7 @@ MULTI_STAGING_DATABASE_URL=postgres://admin:s3cr3t@staging-pg:5432/postgres
 
 # Back up only databases whose names start with "app_"
 MULTI_PROD_DATABASE_URL=postgres://admin:s3cr3t@prod-pg:5432/postgres
-MULTI_PROD_DATABASES_GLOB=app_*
+MULTI_PROD_DATABASE_NAMES_GLOB=app_*
 
 # Back up a single specific database
 SINGLE_ANALYTICS_DATABASE_URL=postgres://ro:pass@pg:5432/analytics
@@ -233,13 +233,13 @@ Replace `100000` with the value of `ENCRYPTION_ITERATIONS` if you changed it fro
 
 ## Docker image
 
-Multi-arch images (`linux/amd64`, `linux/arm64`) are published to GHCR on every push to `main` and on version tags:
+Images (`linux/amd64`, `linux/arm64`) are published to GHCR:
 
-| Tag | When |
+| Tag | Points to |
 |---|---|
-| `ghcr.io/pgsafe/pgsafe:1:latest` | Every push to `main` |
-| `ghcr.io/pgsafe/pgsafe:1:1.2.3` | Tag `v1.2.3` |
-| `ghcr.io/pgsafe/pgsafe:1:1-latest` | Most recent `v1.x.x` tag |
+| `ghcr.io/pgsafe/pgsafe:latest` | Latest commit on `main` |
+| `ghcr.io/pgsafe/pgsafe:1.2.3` | Exact release `v1.2.3` |
+| `ghcr.io/pgsafe/pgsafe:1` | Latest `v1.x.x` release |
 
 ## License
 

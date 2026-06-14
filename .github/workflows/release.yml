@@ -24,16 +24,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Strip v prefix
+      - name: Derive version tags
         id: ver
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          echo "version=$V" >> $GITHUB_OUTPUT
+          echo "major=${V%%.*}" >> $GITHUB_OUTPUT
 
       - name: Promote SHA → release tags
         run: |
           docker buildx imagetools create \
-            --tag ${{ env.IMAGE }}:${{ github.ref_name }} \
             --tag ${{ env.IMAGE }}:${{ steps.ver.outputs.version }} \
-            --tag ${{ env.IMAGE }}:latest \
+            --tag ${{ env.IMAGE }}:${{ steps.ver.outputs.major }} \
             ${{ env.IMAGE }}:${{ github.sha }}
 
   # ── Build static binaries ─────────────────────────────────────────────────

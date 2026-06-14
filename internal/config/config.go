@@ -195,8 +195,8 @@ func parseDatabaseURLs() (multi, single []DatabaseEntry, errs []string) {
 			continue
 		}
 
-		if strings.HasPrefix(k, "MULTI_") && strings.HasSuffix(k, "_DATABASES_GLOB") {
-			connName := strings.TrimSuffix(strings.TrimPrefix(k, "MULTI_"), "_DATABASES_GLOB")
+		if strings.HasPrefix(k, "MULTI_") && strings.HasSuffix(k, "_DATABASE_NAMES_GLOB") {
+			connName := strings.TrimSuffix(strings.TrimPrefix(k, "MULTI_"), "_DATABASE_NAMES_GLOB")
 			if !connNameRe.MatchString(connName) {
 				errs = append(errs, fmt.Sprintf("env var %s: CONNNAME %q must match [A-Z0-9]+", k, connName))
 				continue
