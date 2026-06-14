@@ -83,7 +83,7 @@ verify_custom() {
 
     local data
     data=$(docker run --rm -v "$dir:/b" postgres:18-alpine \
-        pg_restore --data-only --inserts "/b/$bname")
+        pg_restore --data-only -f - "/b/$bname")
 
     echo "$data" | grep -qF "alice@example.com"   || fail "user Alice missing"
     echo "$data" | grep -qF "bob@example.com"     || fail "user Bob missing"

@@ -7,13 +7,44 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
 jobs:
-  e2e:
-    name: "${{ matrix.mode }} / ${{ matrix.format }} / ${{ matrix.compression }} / enc:${{ matrix.encryption }}"
+
+  # ── Build & push image tagged with git SHA ─────────────────────────────────
+  build:
+    name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+
+  # ── E2E matrix ─────────────────────────────────────────────────────────────
+  test:
+    name: "${{ matrix.mode }} / ${{ matrix.format }} / ${{ matrix.compression }} / enc:${{ matrix.encryption }}"
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         mode:        [single, multi, both]
         format:      [custom, plain]
@@ -21,13 +52,21 @@ jobs:
         encryption:  [false, true]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build pgsafe image
-        run: docker build -t pgsafe:e2e .
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Infrastructure ───────────────────────────────────────────────────────
+      - name: Pull images
+        run: |
+          docker pull ${{ env.IMAGE }}:${{ github.sha }}
+          # pgsafe is FROM postgres:18-alpine so this only fetches the manifest
+          docker pull postgres:18-alpine
+
+      # ── Infrastructure ──────────────────────────────────────────────────────
 
       - name: Start MinIO
         run: |
@@ -55,7 +94,7 @@ jobs:
             postgres:18-alpine
           until docker exec postgres pg_isready -U postgres; do sleep 2; done
 
-      # ── Run pgsafe ───────────────────────────────────────────────────────────
+      # ── Run pgsafe ──────────────────────────────────────────────────────────
 
       - name: Run pgsafe
         env:
@@ -81,9 +120,9 @@ jobs:
           if [[ "${{ matrix.encryption }}" == "true" ]]; then
             ARGS+=(-e ENCRYPTION_CIPHER_KEY="$CIPHER_KEY")
           fi
-          docker run "${ARGS[@]}" pgsafe:e2e
+          docker run "${ARGS[@]}" ${{ env.IMAGE }}:${{ github.sha }}
 
-      # ── Download & verify ────────────────────────────────────────────────────
+      # ── Download & verify ───────────────────────────────────────────────────
 
       - name: Download backups from MinIO
         run: |
@@ -115,3 +154,24 @@ jobs:
             ARGS+=(--cipher-key "$CIPHER_KEY")
           fi
           bash e2e/verify.sh "${ARGS[@]}"
+
+  # ── Promote SHA tag to latest (main branch only) ───────────────────────────
+  tag:
+    name: Tag latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote to latest
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.IMAGE }}:latest \
+            ${{ env.IMAGE }}:${{ github.sha }}
