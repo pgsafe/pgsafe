@@ -1,0 +1,94 @@
+name: Release
+
+# Triggered by vX.Y.Z tags. The image for the tagged commit must already
+# exist in GHCR (built by e2e.yml when the commit was pushed to main).
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+
+  # ── Re-tag SHA image → version tags ───────────────────────────────────────
+  docker:
+    name: Tag image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Strip v prefix
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Promote SHA → release tags
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.IMAGE }}:${{ github.ref_name }} \
+            --tag ${{ env.IMAGE }}:${{ steps.ver.outputs.version }} \
+            --tag ${{ env.IMAGE }}:latest \
+            ${{ env.IMAGE }}:${{ github.sha }}
+
+  # ── Build static binaries ─────────────────────────────────────────────────
+  binaries:
+    name: Binary (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {goos: linux,  goarch: amd64}
+          - {goos: linux,  goarch: arm64}
+          - {goos: darwin, goarch: amd64}
+          - {goos: darwin, goarch: arm64}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build -ldflags="-s -w" \
+            -o dist/pgsafe-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/pgsafe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pgsafe-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/pgsafe-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+
+  # ── Create GitHub release with binaries ───────────────────────────────────
+  release:
+    name: GitHub Release
+    needs: [docker, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} dist/* \
+            --repo ${{ github.repository }} \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
