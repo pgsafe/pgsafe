@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -185,54 +184,22 @@ func (m *Manager) backupDatabase(ctx context.Context, connName, dbName, dbURL st
 }
 
 // openBackupPipeline starts pg_dump and builds a streaming pipeline ready for
-// S3 upload. It returns the pipeline, the base S3 key (without suffix), and a
-// cleanup function that must always be deferred by the caller.
-//
-//   - plain:  pg_dump stdout → pipeline (no disk I/O)
-//   - custom: pg_dump → temp file → pipeline (only the raw dump touches disk)
+// S3 upload. Both plain and custom formats are streamed directly from pg_dump
+// stdout — no temporary files are written to disk.
 func (m *Manager) openBackupPipeline(ctx context.Context, base, connName, dbName, dbURL string) (*Pipeline, string, func(), error) {
 	noop := func() {}
 
-	switch m.cfg.DumpFormat {
-	case "plain":
-		r, wait, err := runDumpStream(ctx, dbURL, connName, dbName)
-		if err != nil {
-			return nil, "", noop, fmt.Errorf("pg_dump (plain): %w", err)
-		}
-		p, err := wrapPipeline(ctx, r, wait, m.cfg.CompressionMethod, m.cfg.EncryptionCipherKey, m.cfg.EncryptionIterations)
-		if err != nil {
-			// wrapPipeline already called p.Close() which drains pg_dump; noop is safe.
-			return nil, "", noop, err
-		}
-		return p, base + ".sql", noop, nil
+	ext := map[string]string{"plain": ".sql", "custom": ".dump", "tar": ".tar"}[m.cfg.DumpFormat]
 
-	default: // "custom"
-		if err := os.MkdirAll(m.cfg.DumpTempDir, 0750); err != nil {
-			return nil, "", noop, fmt.Errorf("create temp dir %s: %w", m.cfg.DumpTempDir, err)
-		}
-		dumpPath := filepath.Join(m.cfg.DumpTempDir, base+".dump")
-
-		// cleanup removes the temp file regardless of what happens next.
-		cleanup := func() {
-			if err := os.Remove(dumpPath); err != nil && !os.IsNotExist(err) {
-				slog.Warn("failed to remove dump file", "path", dumpPath, "error", err)
-			}
-		}
-
-		if err := runDump(ctx, dbURL, connName, dbName, dumpPath); err != nil {
-			// Dump failed; clean up whatever was written.
-			cleanup()
-			return nil, "", noop, fmt.Errorf("pg_dump (custom): %w", err)
-		}
-
-		p, err := openPipeline(ctx, dumpPath, m.cfg.CompressionMethod, m.cfg.EncryptionCipherKey, m.cfg.EncryptionIterations)
-		if err != nil {
-			cleanup()
-			return nil, "", noop, fmt.Errorf("open pipeline: %w", err)
-		}
-
-		return p, base + ".dump", cleanup, nil
+	r, wait, err := runDumpStream(ctx, dbURL, connName, dbName, m.cfg.DumpFormat, m.cfg.DumpJobs)
+	if err != nil {
+		return nil, "", noop, fmt.Errorf("pg_dump (%s): %w", m.cfg.DumpFormat, err)
 	}
+	p, err := wrapPipeline(ctx, r, wait, m.cfg.CompressionMethod, m.cfg.EncryptionCipherKey, m.cfg.EncryptionIterations)
+	if err != nil {
+		return nil, "", noop, err
+	}
+	return p, base + ext, noop, nil
 }
 
 func (m *Manager) summarise(startedAt time.Time, results []Result) error {

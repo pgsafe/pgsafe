@@ -149,6 +149,7 @@ echo "   decoded: $(basename "$decoded")"
 
 case "$decoded" in
     *.dump) verify_custom "$decoded" ;;
+    *.tar)  verify_custom "$decoded" ;;
     *.sql)  verify_plain  "$decoded" ;;
     *) fail "unrecognised decoded file: $decoded" ;;
 esac

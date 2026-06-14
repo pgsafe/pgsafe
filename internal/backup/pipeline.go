@@ -27,28 +27,7 @@ import (
 type Pipeline struct {
 	reader io.Reader
 	waits  []func() error
-	file   *os.File // non-nil only for custom format; closed last in Close()
-	s3Ext  string   // accumulated suffix, e.g. ".gz.enc"
-}
-
-// openPipeline opens a dump file on disk and wraps it with the
-// compression/encryption chain (used for custom format).
-// The file is wrapped in io.NopCloser so that closing p.reader (which
-// targets the final stage) does not prematurely close the source file.
-func openPipeline(ctx context.Context, dumpPath, compressionMethod, cipherKey string, iterations int) (*Pipeline, error) {
-	f, err := os.Open(dumpPath)
-	if err != nil {
-		return nil, fmt.Errorf("open dump file: %w", err)
-	}
-	p := &Pipeline{
-		reader: io.NopCloser(f), // wrap so Close() on reader won't double-close the file
-		file:   f,
-	}
-	if err := p.build(ctx, compressionMethod, cipherKey, iterations); err != nil {
-		p.Close()
-		return nil, err
-	}
-	return p, nil
+	s3Ext  string // accumulated suffix, e.g. ".gz.enc"
 }
 
 // wrapPipeline wraps an existing ReadCloser (e.g. pg_dump stdout) with the
@@ -90,7 +69,6 @@ func (p *Pipeline) Read(b []byte) (int, error) { return p.reader.Read(b) }
 //     cascades backwards through the process chain so every stage exits.
 //  2. Call each wait function in reverse order (last stage first) so we collect
 //     exit statuses only after the processes have already stopped.
-//  3. Close the source file, if any (custom format).
 //
 // In the happy path all data has been consumed, so step 1 is a no-op on an
 // already-EOF reader and every wait returns 0. In the abort path (upload error)
@@ -106,13 +84,6 @@ func (p *Pipeline) Close() error {
 	for i := len(p.waits) - 1; i >= 0; i-- {
 		if err := p.waits[i](); err != nil {
 			errs = append(errs, err)
-		}
-	}
-
-	// Step 3: close the source file (custom format only).
-	if p.file != nil {
-		if err := p.file.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close dump file: %w", err))
 		}
 	}
 

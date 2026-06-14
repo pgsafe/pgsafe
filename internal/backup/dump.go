@@ -23,50 +23,25 @@ func logLines(r io.Reader, args ...any) <-chan struct{} {
 	return done
 }
 
-// runDump executes pg_dump writing the custom-format archive to outputPath on disk.
-func runDump(ctx context.Context, dbURL, connName, dbName, outputPath string) error {
+// runDumpStream starts pg_dump and returns its stdout as a streaming reader.
+// format must be "plain", "custom", or "tar". For custom, --compress=0 is
+// added so that compression is handled by the pipeline layer. For tar, jobs
+// controls parallel table dumping (--jobs). The caller must drain the reader
+// fully and then call wait() to collect the exit status.
+func runDumpStream(ctx context.Context, dbURL, connName, dbName, format string, jobs int) (io.ReadCloser, func() error, error) {
 	args := []string{
-		"--format=c",
-		"--verbose",
-		fmt.Sprintf("--file=%s", outputPath),
-		"--no-owner",
-		"--no-privileges",
-		"--compress=0",
-		fmt.Sprintf("--dbname=%s", dbURL),
-	}
-
-	cmd := exec.CommandContext(ctx, "pg_dump", args...)
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("pg_dump stderr pipe: %w", err)
-	}
-
-	slog.Debug("pg_dump starting", "format", "custom", "conn", connName, "db", dbName, "output", outputPath)
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start pg_dump: %w", err)
-	}
-
-	done := logLines(stderr, "conn", connName, "db", dbName)
-	<-done
-
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("pg_dump: %w", err)
-	}
-	return nil
-}
-
-// runDumpStream starts pg_dump in plain-SQL mode and returns its stdout as a streaming
-// reader. No temporary file is written. The caller must drain the reader fully and then
-// call wait() to collect the exit status.
-func runDumpStream(ctx context.Context, dbURL, connName, dbName string) (io.ReadCloser, func() error, error) {
-	args := []string{
-		"--format=plain",
+		fmt.Sprintf("--format=%s", format),
 		"--verbose",
 		"--no-owner",
 		"--no-privileges",
-		fmt.Sprintf("--dbname=%s", dbURL),
 	}
+	switch format {
+	case "custom":
+		args = append(args, "--compress=0")
+	case "tar":
+		args = append(args, fmt.Sprintf("--jobs=%d", jobs))
+	}
+	args = append(args, fmt.Sprintf("--dbname=%s", dbURL))
 
 	cmd := exec.CommandContext(ctx, "pg_dump", args...)
 
@@ -83,7 +58,7 @@ func runDumpStream(ctx context.Context, dbURL, connName, dbName string) (io.Read
 		return nil, nil, fmt.Errorf("start pg_dump: %w", err)
 	}
 
-	slog.Debug("pg_dump started", "format", "plain/stream", "conn", connName, "db", dbName)
+	slog.Debug("pg_dump started", "format", format, "conn", connName, "db", dbName)
 
 	done := logLines(stderr, "conn", connName, "db", dbName)
 

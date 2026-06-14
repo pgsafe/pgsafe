@@ -41,11 +41,11 @@ type Config struct {
 	S3SecretAccessKey string
 	S3PathStyle       bool
 
-	DumpFormat             string // "plain" or "custom"
+	DumpFormat             string // "plain", "custom", or "tar"
+	DumpJobs               int    // parallel dump workers; only used for tar format
 	CompressionMethod      string
 	EncryptionCipherKey    string
 	EncryptionIterations   int
-	DumpTempDir            string
 
 	SlackWebhookURL string
 
@@ -66,8 +66,8 @@ func Load() (*Config, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 	v.SetDefault("DUMP_FORMAT", "custom")
+	v.SetDefault("DUMP_JOBS", 1)
 	v.SetDefault("COMPRESSION_METHOD", "none")
-	v.SetDefault("DUMP_TEMP_DIR", "/data")
 	v.SetDefault("S3_PATH_STYLE", false)
 	v.SetDefault("ENCRYPTION_ITERATIONS", 100000)
 	v.SetDefault("SMTP_TLS_MODE", "starttls")
@@ -99,9 +99,14 @@ func Load() (*Config, error) {
 
 	dumpFormat := v.GetString("DUMP_FORMAT")
 	switch dumpFormat {
-	case "plain", "custom":
+	case "plain", "custom", "tar":
 	default:
-		errs = append(errs, fmt.Sprintf("DUMP_FORMAT must be 'plain' or 'custom' (got %q)", dumpFormat))
+		errs = append(errs, fmt.Sprintf("DUMP_FORMAT must be 'plain', 'custom', or 'tar' (got %q)", dumpFormat))
+	}
+
+	dumpJobs := v.GetInt("DUMP_JOBS")
+	if dumpJobs < 1 {
+		errs = append(errs, fmt.Sprintf("DUMP_JOBS must be >= 1 (got %d)", dumpJobs))
 	}
 
 	compressionMethod := v.GetString("COMPRESSION_METHOD")
@@ -166,10 +171,10 @@ func Load() (*Config, error) {
 		S3SecretAccessKey:   s3SecretAccessKey,
 		S3PathStyle:         v.GetBool("S3_PATH_STYLE"),
 		DumpFormat:          dumpFormat,
+		DumpJobs:            dumpJobs,
 		CompressionMethod:   compressionMethod,
 		EncryptionCipherKey:  v.GetString("ENCRYPTION_CIPHER_KEY"),
 		EncryptionIterations: encryptionIterations,
-		DumpTempDir:          v.GetString("DUMP_TEMP_DIR"),
 		WebhookSuccessURL: v.GetString("WEBHOOK_SUCCESS_URL"),
 		WebhookFailureURL: v.GetString("WEBHOOK_FAILURE_URL"),
 

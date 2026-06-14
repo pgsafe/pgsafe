@@ -52,7 +52,7 @@ jobs:
       fail-fast: true
       matrix:
         mode:        [single, multi, both]
-        format:      [custom, plain]
+        format:      [custom, plain, tar]
         compression: [none, gzip, bzip2, xz]
         encryption:  [false, true]
 

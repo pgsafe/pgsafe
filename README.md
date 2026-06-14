@@ -86,7 +86,6 @@ Objects are uploaded to `<CONNNAME>/<dbname>/<timestamp>.<ext>` inside the bucke
 | Variable | Default | Description |
 |---|---|---|
 | `DUMP_FORMAT` | `custom` | `custom` — pg_dump custom format (`-Fc`). Writes a temp file then streams to S3. `plain` — SQL text, fully streamed in memory (no temp file). |
-| `DUMP_TEMP_DIR` | `/data` | Directory for the temporary dump file when `DUMP_FORMAT=custom`. Must have sufficient free space. |
 
 ### Processing
 

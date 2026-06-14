@@ -36,13 +36,12 @@ RUN set -eux; \
 
 COPY --from=builder /usr/local/bin/pgsafe /usr/local/bin/pgsafe
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh && mkdir -p /data
+RUN chmod +x /docker-entrypoint.sh
 
 # Defaults — override via environment variables.
 ENV RUN_MODE=job \
     CRON_SCHEDULE="0 0 * * *" \
     DUMP_FORMAT=custom \
-    DUMP_TEMP_DIR=/data \
     COMPRESSION_METHOD=none
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
