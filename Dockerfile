@@ -19,7 +19,8 @@ RUN apk add --no-cache \
       curl \
       gzip \
       bzip2 \
-      xz
+      xz \
+      openssl
 
 # supercronic — drop-in cron for containers (handles signals correctly).
 ARG SUPERCRONIC_VERSION=0.2.46
