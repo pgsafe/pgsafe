@@ -1,0 +1,117 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: "${{ matrix.mode }} / ${{ matrix.format }} / ${{ matrix.compression }} / enc:${{ matrix.encryption }}"
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:        [single, multi, both]
+        format:      [custom, plain]
+        compression: [none, gzip, bzip2, xz]
+        encryption:  [false, true]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build pgsafe image
+        run: docker build -t pgsafe:e2e .
+
+      # ── Infrastructure ───────────────────────────────────────────────────────
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data
+          until curl -sf http://localhost:9000/minio/health/live; do sleep 2; done
+
+      - name: Create MinIO bucket
+        run: |
+          docker run --rm --network host \
+            --entrypoint /bin/sh minio/mc -c \
+            'mc alias set s http://localhost:9000 minioadmin minioadmin --quiet && mc mb s/pgsafe-test'
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name postgres \
+            -p 5432:5432 \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=testdb \
+            -v "$GITHUB_WORKSPACE/e2e/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro" \
+            postgres:18-alpine
+          until docker exec postgres pg_isready -U postgres; do sleep 2; done
+
+      # ── Run pgsafe ───────────────────────────────────────────────────────────
+
+      - name: Run pgsafe
+        env:
+          CIPHER_KEY: test-e2e-cipher-key-for-aes256!!
+        run: |
+          ARGS=(
+            --rm --network host
+            -e S3_ENDPOINT=http://localhost:9000
+            -e S3_BUCKET=pgsafe-test
+            -e S3_REGION=us-east-1
+            -e S3_ACCESS_KEY_ID=minioadmin
+            -e S3_SECRET_ACCESS_KEY=minioadmin
+            -e S3_PATH_STYLE=true
+            -e DUMP_FORMAT=${{ matrix.format }}
+            -e COMPRESSION_METHOD=${{ matrix.compression }}
+          )
+          if [[ "${{ matrix.mode }}" != "multi" ]]; then
+            ARGS+=(-e SINGLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/testdb)
+          fi
+          if [[ "${{ matrix.mode }}" != "single" ]]; then
+            ARGS+=(-e MULTI_PROD_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres)
+          fi
+          if [[ "${{ matrix.encryption }}" == "true" ]]; then
+            ARGS+=(-e ENCRYPTION_CIPHER_KEY="$CIPHER_KEY")
+          fi
+          docker run "${ARGS[@]}" pgsafe:e2e
+
+      # ── Download & verify ────────────────────────────────────────────────────
+
+      - name: Download backups from MinIO
+        run: |
+          mkdir -p /tmp/backups
+          docker run --rm --network host \
+            -v /tmp/backups:/out \
+            --entrypoint /bin/sh minio/mc -c \
+            'mc alias set s http://localhost:9000 minioadmin minioadmin --quiet && mc mirror s/pgsafe-test /out'
+
+      - name: Verify backups
+        env:
+          CIPHER_KEY: test-e2e-cipher-key-for-aes256!!
+        run: |
+          case "${{ matrix.mode }}" in
+            single) EXPECT_CONNS=TEST; TESTDB_CONN=TEST ;;
+            multi)  EXPECT_CONNS=PROD; TESTDB_CONN=PROD ;;
+            both)   EXPECT_CONNS=TEST,PROD; TESTDB_CONN=TEST ;;
+          esac
+
+          ARGS=(
+            --backup-dir   /tmp/backups
+            --format       ${{ matrix.format }}
+            --compression  ${{ matrix.compression }}
+            --encryption   ${{ matrix.encryption }}
+            --expect-conns "$EXPECT_CONNS"
+            --testdb-conn  "$TESTDB_CONN"
+          )
+          if [[ "${{ matrix.encryption }}" == "true" ]]; then
+            ARGS+=(--cipher-key "$CIPHER_KEY")
+          fi
+          bash e2e/verify.sh "${ARGS[@]}"
