@@ -85,7 +85,8 @@ Objects are uploaded to `<CONNNAME>/<dbname>/<timestamp>.<ext>` inside the bucke
 
 | Variable | Default | Description |
 |---|---|---|
-| `DUMP_FORMAT` | `custom` | `custom` — pg_dump custom format (`-Fc`). Writes a temp file then streams to S3. `plain` — SQL text, fully streamed in memory (no temp file). |
+| `DUMP_FORMAT` | `custom` | Output format: `custom` (`-Fc`, pg_dump archive), `plain` (SQL text), or `tar` (`-Ft`, tar archive). All formats are streamed directly to S3 without a temporary file. |
+| `DUMP_JOBS` | `1` | Parallel dump workers passed as `--jobs` to pg_dump. Only used when `DUMP_FORMAT=tar`. |
 
 ### Processing
 
