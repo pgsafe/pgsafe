@@ -7,13 +7,25 @@ import (
 )
 
 type webhookDB struct {
-	URL string `json:"url"`
+	ConnName  string `json:"connName"`
+	DBName    string `json:"dbName"`
+	Mode      string `json:"mode"`
+	URL       string `json:"url"`
+	SizeBytes int64  `json:"sizeBytes"`
+	Duration  string `json:"duration"`
 }
 
-func (c *Client) postWebhookSuccess(startedAt, finishedAt time.Time, dbURLs []string) {
-	dbs := make([]webhookDB, len(dbURLs))
-	for i, u := range dbURLs {
-		dbs[i] = webhookDB{URL: u}
+func (c *Client) postWebhookSuccess(startedAt, finishedAt time.Time, databases []DBInfo) {
+	dbs := make([]webhookDB, len(databases))
+	for i, d := range databases {
+		dbs[i] = webhookDB{
+			ConnName:  d.ConnName,
+			DBName:    d.DBName,
+			Mode:      d.Mode,
+			URL:       d.URL,
+			SizeBytes: d.SizeBytes,
+			Duration:  d.Duration.Round(time.Second).String(),
+		}
 	}
 	payload := struct {
 		StartedAt  string      `json:"startedAt"`

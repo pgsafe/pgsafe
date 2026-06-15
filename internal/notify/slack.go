@@ -8,14 +8,16 @@ import (
 	"time"
 )
 
-func (c *Client) sendSlackSuccess(startedAt, finishedAt time.Time, dbURLs []string) {
+func (c *Client) sendSlackSuccess(startedAt, finishedAt time.Time, databases []DBInfo) {
 	var b strings.Builder
 	b.WriteString(":white_check_mark: *[pgsafe]* Backup run succeeded\n")
 	b.WriteString(fmt.Sprintf("*startedAt:* %s\n", startedAt.UTC().Format(time.RFC3339)))
 	b.WriteString(fmt.Sprintf("*finishedAt:* %s\n", finishedAt.UTC().Format(time.RFC3339)))
 	b.WriteString("*databases:*\n")
-	for _, u := range dbURLs {
-		b.WriteString("• " + u + "\n")
+	for _, d := range databases {
+		b.WriteString(fmt.Sprintf("• [%s] %s/%s — %s, %s\n",
+			d.Mode, d.ConnName, d.DBName, d.URL,
+			fmt.Sprintf("%s in %s", formatBytes(d.SizeBytes), d.Duration.Round(time.Second))))
 	}
 	c.postSlack(strings.TrimRight(b.String(), "\n"))
 }

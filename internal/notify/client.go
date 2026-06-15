@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+func formatBytes(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/float64(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/float64(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
+}
+
 // Config groups all notifier settings passed to New.
 type Config struct {
 	SlackWebhookURL   string
@@ -63,17 +76,27 @@ func (c *Client) Flush() {
 	}
 }
 
+// DBInfo describes a single successfully backed-up database.
+type DBInfo struct {
+	ConnName  string
+	DBName    string
+	Mode      string // "single" or "multi"
+	URL       string // sanitized, no password
+	SizeBytes int64
+	Duration  time.Duration
+}
+
 // NotifySuccess fires all configured channels asynchronously to report a
 // successful backup run.
-func (c *Client) NotifySuccess(startedAt, finishedAt time.Time, dbURLs []string) {
+func (c *Client) NotifySuccess(startedAt, finishedAt time.Time, databases []DBInfo) {
 	if c.slackURL != "" {
-		c.dispatch(func() { c.sendSlackSuccess(startedAt, finishedAt, dbURLs) })
+		c.dispatch(func() { c.sendSlackSuccess(startedAt, finishedAt, databases) })
 	}
 	if c.smtp != nil {
-		c.dispatch(func() { c.smtp.sendSuccess(startedAt, finishedAt, dbURLs) })
+		c.dispatch(func() { c.smtp.sendSuccess(startedAt, finishedAt, databases) })
 	}
 	if c.webhookSuccessURL != "" {
-		c.dispatch(func() { c.postWebhookSuccess(startedAt, finishedAt, dbURLs) })
+		c.dispatch(func() { c.postWebhookSuccess(startedAt, finishedAt, databases) })
 	}
 }
 

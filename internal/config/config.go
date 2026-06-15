@@ -34,12 +34,13 @@ type Config struct {
 	MultiDatabases  []DatabaseEntry
 	SingleDatabases []DatabaseEntry
 
-	S3Endpoint        string
-	S3Bucket          string
-	S3Region          string
-	S3AccessKeyID     string
-	S3SecretAccessKey string
-	S3PathStyle       bool
+	S3Endpoint           string
+	S3Bucket             string
+	S3Region             string
+	S3AccessKeyID        string
+	S3SecretAccessKey    string
+	S3PathStyle          bool
+	S3MultipartPartSizeMB int // minimum 5
 
 	DumpFormat             string // "plain", "custom", or "tar"
 	DumpJobs               int    // parallel dump workers; only used for tar format
@@ -69,6 +70,7 @@ func Load() (*Config, error) {
 	v.SetDefault("DUMP_JOBS", 1)
 	v.SetDefault("COMPRESSION_METHOD", "none")
 	v.SetDefault("S3_PATH_STYLE", false)
+	v.SetDefault("S3_MULTIPART_PART_SIZE", 64)
 	v.SetDefault("ENCRYPTION_ITERATIONS", 100000)
 	v.SetDefault("SMTP_TLS_MODE", "starttls")
 	v.SetDefault("SMTP_PORT", 587)
@@ -95,6 +97,11 @@ func Load() (*Config, error) {
 	}
 	if s3SecretAccessKey == "" {
 		errs = append(errs, "S3_SECRET_ACCESS_KEY is required")
+	}
+
+	s3MultipartPartSizeMB := v.GetInt("S3_MULTIPART_PART_SIZE")
+	if s3MultipartPartSizeMB < 5 {
+		errs = append(errs, fmt.Sprintf("S3_MULTIPART_PART_SIZE must be >= 5 MB (got %d)", s3MultipartPartSizeMB))
 	}
 
 	dumpFormat := v.GetString("DUMP_FORMAT")
@@ -169,7 +176,8 @@ func Load() (*Config, error) {
 		S3Region:            s3Region,
 		S3AccessKeyID:       s3AccessKeyID,
 		S3SecretAccessKey:   s3SecretAccessKey,
-		S3PathStyle:         v.GetBool("S3_PATH_STYLE"),
+		S3PathStyle:           v.GetBool("S3_PATH_STYLE"),
+		S3MultipartPartSizeMB: s3MultipartPartSizeMB,
 		DumpFormat:          dumpFormat,
 		DumpJobs:            dumpJobs,
 		CompressionMethod:   compressionMethod,

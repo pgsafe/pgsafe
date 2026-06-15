@@ -15,10 +15,7 @@ import (
 	"github.com/pgsafe/pgsafe/internal/config"
 )
 
-const (
-	uploadPartSize  = 64 * 1024 * 1024 // 64 MB per multipart part
-	uploadConcurrency = 4
-)
+const uploadConcurrency = 1
 
 type s3Uploader struct {
 	mgr    *manager.Uploader
@@ -42,7 +39,7 @@ func newS3Uploader(ctx context.Context, cfg *config.Config) (*s3Uploader, error)
 	})
 
 	mgr := manager.NewUploader(client, func(u *manager.Uploader) {
-		u.PartSize = uploadPartSize
+		u.PartSize = int64(cfg.S3MultipartPartSizeMB) * 1024 * 1024
 		u.Concurrency = uploadConcurrency
 	})
 

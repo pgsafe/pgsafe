@@ -19,6 +19,7 @@ import (
 type Result struct {
 	ConnName     string
 	DBName       string
+	Mode         string // "single" or "multi"
 	SanitizedURL string // password-free "user@host:port/db" for webhook payload
 	S3Key        string
 	SizeBytes    int64
@@ -77,6 +78,7 @@ func (m *Manager) backupMulti(ctx context.Context, entry config.DatabaseEntry) [
 		return []Result{{
 			ConnName: entry.ConnName,
 			DBName:   "(list)",
+			Mode:     "multi",
 			Err:      fmt.Errorf("list databases for %s: %w", entry.ConnName, err),
 		}}
 	}
@@ -102,11 +104,12 @@ func (m *Manager) backupMulti(ctx context.Context, entry config.DatabaseEntry) [
 			results = append(results, Result{
 				ConnName: entry.ConnName,
 				DBName:   dbName,
+				Mode:     "multi",
 				Err:      fmt.Errorf("build URL for %s/%s: %w", entry.ConnName, dbName, err),
 			})
 			continue
 		}
-		results = append(results, m.backupDatabase(ctx, entry.ConnName, dbName, dbURL))
+		results = append(results, m.backupDatabase(ctx, entry.ConnName, dbName, dbURL, "multi"))
 	}
 	return results
 }
@@ -118,15 +121,16 @@ func (m *Manager) backupSingle(ctx context.Context, entry config.DatabaseEntry) 
 		return Result{
 			ConnName: entry.ConnName,
 			DBName:   "(unknown)",
+			Mode:     "single",
 			Err:      fmt.Errorf("extract db name from %s: %w", entry.ConnName, err),
 		}
 	}
-	return m.backupDatabase(ctx, entry.ConnName, dbName, entry.URL)
+	return m.backupDatabase(ctx, entry.ConnName, dbName, entry.URL, "single")
 }
 
-func (m *Manager) backupDatabase(ctx context.Context, connName, dbName, dbURL string) Result {
+func (m *Manager) backupDatabase(ctx context.Context, connName, dbName, dbURL, mode string) Result {
 	start := time.Now()
-	result := Result{ConnName: connName, DBName: dbName, SanitizedURL: sanitizeDBURL(dbURL)}
+	result := Result{ConnName: connName, DBName: dbName, Mode: mode, SanitizedURL: sanitizeDBURL(dbURL)}
 
 	slog.Info("starting backup", "conn", connName, "db", dbName, "format", m.cfg.DumpFormat)
 
@@ -227,13 +231,18 @@ func (m *Manager) summarise(startedAt time.Time, results []Result) error {
 		return fmt.Errorf("backup run finished with errors (%d/%d succeeded)", succeeded, len(results))
 	}
 
-	var dbURLs []string
+	var dbs []notify.DBInfo
 	for _, r := range results {
-		if r.SanitizedURL != "" {
-			dbURLs = append(dbURLs, r.SanitizedURL)
-		}
+		dbs = append(dbs, notify.DBInfo{
+			ConnName:  r.ConnName,
+			DBName:    r.DBName,
+			Mode:      r.Mode,
+			URL:       r.SanitizedURL,
+			SizeBytes: r.SizeBytes,
+			Duration:  r.Duration,
+		})
 	}
-	m.notifier.NotifySuccess(startedAt, finishedAt, dbURLs)
+	m.notifier.NotifySuccess(startedAt, finishedAt, dbs)
 	return nil
 }
 

@@ -71,6 +71,7 @@ SINGLE_ANALYTICS_DATABASE_URL=postgres://ro:pass@pg:5432/analytics
 | `S3_ACCESS_KEY_ID` | yes | — | Access key ID |
 | `S3_SECRET_ACCESS_KEY` | yes | — | Secret access key |
 | `S3_PATH_STYLE` | no | `false` | Set `true` for providers that require path-style URLs (MinIO, some self-hosted). |
+| `S3_MULTIPART_PART_SIZE` | no | `64` | Multipart upload part size in MB (minimum `5`). Increase to reduce the number of S3 API operations. |
 
 Objects are uploaded to `<CONNNAME>/<dbname>/<timestamp>.<ext>` inside the bucket.
 
@@ -110,7 +111,7 @@ In job mode (`RUN_MODE=job`) pgsafe waits up to 5 minutes after the backup compl
 
 | Variable | Description |
 |---|---|
-| `WEBHOOK_SUCCESS_URL` | URL to `POST` when **all** backups in a run succeed. Body: `{ "startedAt": "<ISO8601>", "finishedAt": "<ISO8601>", "databases": [ { "url": "user@host:port/db" } ] }`. Passwords are never included in the database URLs. |
+| `WEBHOOK_SUCCESS_URL` | URL to `POST` when **all** backups in a run succeed. Body: `{ "startedAt": "<ISO8601>", "finishedAt": "<ISO8601>", "databases": [ { "connName": "PROD", "dbName": "mydb", "mode": "single\|multi", "url": "user@host:port/db", "sizeBytes": 1234, "duration": "1m2s" } ] }`. Passwords are never included in the database URLs. |
 | `WEBHOOK_FAILURE_URL` | URL to `POST` when **any** backup in a run fails. Body: `{ "startedAt": "<ISO8601>", "finishedAt": "<ISO8601>", "message": "..." }`. |
 
 #### Slack
@@ -148,6 +149,8 @@ When `OTEL_OTLP_ENDPOINT` is set, structured log records are exported to the con
 
 ### Cloudflare R2
 
+R2 requires path-style URLs (`S3_PATH_STYLE=true`). 
+
 ```sh
 docker run --rm \
   -e SINGLE_PROD_DATABASE_URL="postgres://user:pass@pg:5432/mydb" \
@@ -156,6 +159,7 @@ docker run --rm \
   -e S3_REGION="auto" \
   -e S3_ACCESS_KEY_ID="<r2_access_key>" \
   -e S3_SECRET_ACCESS_KEY="<r2_secret_key>" \
+  -e S3_PATH_STYLE=true \
   ghcr.io/pgsafe/pgsafe:1
 ```
 

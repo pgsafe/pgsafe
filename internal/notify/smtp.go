@@ -140,13 +140,15 @@ func (s *smtpSender) sendOnce(subject, body string) error {
 	return w.Close()
 }
 
-func (s *smtpSender) sendSuccess(startedAt, finishedAt time.Time, dbURLs []string) {
+func (s *smtpSender) sendSuccess(startedAt, finishedAt time.Time, databases []DBInfo) {
 	var body strings.Builder
 	body.WriteString("startedAt:  " + startedAt.UTC().Format(time.RFC3339) + "\r\n")
 	body.WriteString("finishedAt: " + finishedAt.UTC().Format(time.RFC3339) + "\r\n")
 	body.WriteString("databases:\r\n")
-	for _, u := range dbURLs {
-		body.WriteString("- " + u + "\r\n")
+	for _, d := range databases {
+		body.WriteString(fmt.Sprintf("- [%s] %s/%s — %s — %s in %s\r\n",
+			d.Mode, d.ConnName, d.DBName, d.URL,
+			formatBytes(d.SizeBytes), d.Duration.Round(time.Second)))
 	}
 	withRetry("smtp", func() error {
 		return s.sendOnce("[pgsafe] Backup run succeeded", body.String())
