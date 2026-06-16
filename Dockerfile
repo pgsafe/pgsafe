@@ -19,7 +19,9 @@ FROM postgres:18
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
+      gzip \
       pigz \
+      bzip2 \
       pbzip2 \
       xz-utils \
       openssl \
