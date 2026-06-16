@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"strings"
 )
 
 // logLines reads lines from r and emits each as a separate slog.Debug record.
@@ -46,6 +47,15 @@ func runDumpStream(ctx context.Context, dbURL, connName, dbName, format string, 
 
 	cmd := exec.CommandContext(ctx, "pg_dump", args...)
 
+	logArgs := make([]string, len(args))
+	copy(logArgs, args)
+	for i, a := range logArgs {
+		if strings.HasPrefix(a, "--dbname=") {
+			logArgs[i] = "--dbname=" + sanitizeDBURL(strings.TrimPrefix(a, "--dbname="))
+		}
+	}
+	slog.Debug("pg_dump command", "conn", connName, "db", dbName, "args", logArgs)
+
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, nil, fmt.Errorf("pg_dump stderr pipe: %w", err)
@@ -58,8 +68,6 @@ func runDumpStream(ctx context.Context, dbURL, connName, dbName, format string, 
 	if err := cmd.Start(); err != nil {
 		return nil, nil, fmt.Errorf("start pg_dump: %w", err)
 	}
-
-	slog.Debug("pg_dump started", "format", format, "conn", connName, "db", dbName)
 
 	done := logLines(stderr, "conn", connName, "db", dbName)
 

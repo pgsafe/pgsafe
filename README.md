@@ -74,7 +74,7 @@ SINGLE_ANALYTICS_DATABASE_URL=postgres://ro:pass@pg:5432/analytics
 | `S3_PATH_STYLE` | no | `false` | Set `true` for providers that require path-style URLs (MinIO, some self-hosted). |
 | `S3_MULTIPART_PART_SIZE` | no | `64` | Multipart upload part size in MB (minimum `5`). Increase to reduce the number of S3 API operations. |
 
-Objects are uploaded to `<CONNNAME>/<dbname>/<timestamp>.<ext>` inside the bucket.
+Objects are uploaded to `<CONNNAME>_<dbname>_<timestamp>.<ext>` inside the bucket (e.g. `PROD_mydb_20240101_030000.dump`).
 
 ### Run mode
 
