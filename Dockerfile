@@ -21,7 +21,7 @@ RUN apk add --no-cache \
       gzip \
       pigz \
       bzip2 \
-      pbzip2 \
+      lbzip2 \
       xz \
       openssl
 

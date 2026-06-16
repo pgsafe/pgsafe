@@ -109,15 +109,12 @@ func (p *Pipeline) applyCompression(ctx context.Context, algorithm string, jobs 
 		p.waits = append(p.waits, wait)
 		return ".gz", nil
 	case "bzip2":
+		var cmd string
 		var args []string
 		if jobs > 1 {
-			args = []string{"-c", "-p", jobs_s}
+			cmd, args = "lbzip2", []string{"-c", "-n", jobs_s}
 		} else {
-			args = []string{"-c"}
-		}
-		cmd := "bzip2"
-		if jobs > 1 {
-			cmd = "pbzip2"
+			cmd, args = "bzip2", []string{"-c"}
 		}
 		r, wait, err := cmdStream(ctx, p.reader, cmd, args...)
 		if err != nil {
