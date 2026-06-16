@@ -25,10 +25,11 @@ func (e *ValidationError) Error() string {
 }
 
 type DatabaseEntry struct {
-	ConnName       string
-	URL            string
-	DatabasesGlob  string // MULTI only; mutually exclusive with DatabasesRegex
-	DatabasesRegex string // MULTI only; mutually exclusive with DatabasesGlob
+	ConnName         string
+	URL              string
+	DatabasesGlob    string   // MULTI only; mutually exclusive with DatabasesRegex
+	DatabasesRegex   string   // MULTI only; mutually exclusive with DatabasesGlob
+	PgdumpExtraArgs  []string // extra arguments appended to pg_dump invocation
 }
 
 type Config struct {
@@ -229,8 +230,9 @@ func Load() (*Config, error) {
 }
 
 func parseDatabaseURLs() (multi, single []DatabaseEntry, errs []string) {
-	globs  := map[string]string{} // connName → glob pattern
-	regexes := map[string]string{} // connName → regex pattern
+	globs    := map[string]string{} // connName → glob pattern
+	regexes  := map[string]string{} // connName → regex pattern
+	extraArgs := map[string][]string{} // "MULTI/connName" or "SINGLE/connName" → extra args
 
 	for _, env := range os.Environ() {
 		k, v, ok := strings.Cut(env, "=")
@@ -264,6 +266,19 @@ func parseDatabaseURLs() (multi, single []DatabaseEntry, errs []string) {
 			}
 			regexes[connName] = v
 			continue
+		}
+
+		for _, pfx := range []string{"MULTI_", "SINGLE_"} {
+			if strings.HasPrefix(k, pfx) && strings.HasSuffix(k, "_PGDUMP_EXTRA_ARGUMENTS") {
+				connName := strings.TrimSuffix(strings.TrimPrefix(k, pfx), "_PGDUMP_EXTRA_ARGUMENTS")
+				if !connNameRe.MatchString(connName) {
+					errs = append(errs, fmt.Sprintf("env var %s: CONNNAME %q must match [A-Z0-9]+", k, connName))
+					break
+				}
+				key := pfx[:len(pfx)-1] + "/" + connName // e.g. "MULTI/FOO"
+				extraArgs[key] = strings.Fields(v)
+				break
+			}
 		}
 
 		var prefix, suffix string
@@ -303,6 +318,17 @@ func parseDatabaseURLs() (multi, single []DatabaseEntry, errs []string) {
 		}
 		multi[i].DatabasesGlob = glob
 		multi[i].DatabasesRegex = rx
+	}
+
+	for i := range multi {
+		if args, ok := extraArgs["MULTI/"+multi[i].ConnName]; ok {
+			multi[i].PgdumpExtraArgs = args
+		}
+	}
+	for i := range single {
+		if args, ok := extraArgs["SINGLE/"+single[i].ConnName]; ok {
+			single[i].PgdumpExtraArgs = args
+		}
 	}
 
 	sort.Slice(multi, func(i, j int) bool { return multi[i].ConnName < multi[j].ConnName })

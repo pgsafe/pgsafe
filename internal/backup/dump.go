@@ -28,7 +28,7 @@ func logLines(r io.Reader, args ...any) <-chan struct{} {
 // added so that compression is handled by the pipeline layer. For tar, jobs
 // controls parallel table dumping (--jobs). The caller must drain the reader
 // fully and then call wait() to collect the exit status.
-func runDumpStream(ctx context.Context, dbURL, connName, dbName, format string, jobs int) (io.ReadCloser, func() error, error) {
+func runDumpStream(ctx context.Context, dbURL, connName, dbName, format string, jobs int, extraArgs []string) (io.ReadCloser, func() error, error) {
 	args := []string{
 		fmt.Sprintf("--format=%s", format),
 		"--verbose",
@@ -41,6 +41,7 @@ func runDumpStream(ctx context.Context, dbURL, connName, dbName, format string, 
 	case "tar":
 		args = append(args, fmt.Sprintf("--jobs=%d", jobs))
 	}
+	args = append(args, extraArgs...)
 	args = append(args, fmt.Sprintf("--dbname=%s", dbURL))
 
 	cmd := exec.CommandContext(ctx, "pg_dump", args...)

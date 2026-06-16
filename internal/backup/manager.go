@@ -115,7 +115,7 @@ func (m *Manager) backupMulti(ctx context.Context, entry config.DatabaseEntry) [
 			})
 			continue
 		}
-		results = append(results, m.backupDatabase(ctx, entry.ConnName, dbName, dbURL, "multi"))
+		results = append(results, m.backupDatabase(ctx, entry.ConnName, dbName, dbURL, "multi", entry.PgdumpExtraArgs))
 	}
 	return results
 }
@@ -131,10 +131,10 @@ func (m *Manager) backupSingle(ctx context.Context, entry config.DatabaseEntry) 
 			Err:      fmt.Errorf("extract db name from %s: %w", entry.ConnName, err),
 		}
 	}
-	return m.backupDatabase(ctx, entry.ConnName, dbName, entry.URL, "single")
+	return m.backupDatabase(ctx, entry.ConnName, dbName, entry.URL, "single", entry.PgdumpExtraArgs)
 }
 
-func (m *Manager) backupDatabase(ctx context.Context, connName, dbName, dbURL, mode string) Result {
+func (m *Manager) backupDatabase(ctx context.Context, connName, dbName, dbURL, mode string, pgdumpExtraArgs []string) Result {
 	start := time.Now()
 	result := Result{ConnName: connName, DBName: dbName, Mode: mode, SanitizedURL: sanitizeDBURL(dbURL)}
 
@@ -143,7 +143,7 @@ func (m *Manager) backupDatabase(ctx context.Context, connName, dbName, dbURL, m
 	timestamp := start.UTC().Format("20060102_150405")
 	base := fmt.Sprintf("%s_%s_%s", connName, dbName, timestamp)
 
-	pipeline, s3Base, cleanup, err := m.openBackupPipeline(ctx, base, connName, dbName, dbURL)
+	pipeline, s3Base, cleanup, err := m.openBackupPipeline(ctx, base, connName, dbName, dbURL, pgdumpExtraArgs)
 	if err != nil {
 		slog.Error("backup pipeline setup failed", "conn", connName, "db", dbName, "error", err)
 		result.Err = err
@@ -196,12 +196,12 @@ func (m *Manager) backupDatabase(ctx context.Context, connName, dbName, dbURL, m
 // openBackupPipeline starts pg_dump and builds a streaming pipeline ready for
 // S3 upload. Both plain and custom formats are streamed directly from pg_dump
 // stdout — no temporary files are written to disk.
-func (m *Manager) openBackupPipeline(ctx context.Context, base, connName, dbName, dbURL string) (*Pipeline, string, func(), error) {
+func (m *Manager) openBackupPipeline(ctx context.Context, base, connName, dbName, dbURL string, pgdumpExtraArgs []string) (*Pipeline, string, func(), error) {
 	noop := func() {}
 
 	ext := map[string]string{"plain": ".sql", "custom": ".dump", "tar": ".tar"}[m.cfg.DumpFormat]
 
-	r, wait, err := runDumpStream(ctx, dbURL, connName, dbName, m.cfg.DumpFormat, m.cfg.DumpJobs)
+	r, wait, err := runDumpStream(ctx, dbURL, connName, dbName, m.cfg.DumpFormat, m.cfg.DumpJobs, pgdumpExtraArgs)
 	if err != nil {
 		return nil, "", noop, fmt.Errorf("pg_dump (%s): %w", m.cfg.DumpFormat, err)
 	}
