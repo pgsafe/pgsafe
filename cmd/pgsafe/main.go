@@ -12,6 +12,8 @@ import (
 	"github.com/pgsafe/pgsafe/internal/telemetry"
 )
 
+var version = "(unknown)"
+
 func main() {
 	ctx := context.Background()
 
@@ -23,6 +25,8 @@ func main() {
 	}
 	slog.SetDefault(slog.New(h))
 	defer otelShutdown()
+
+	slog.Info("pgsafe starting", "version", version)
 
 	cfg, err := config.Load()
 	if err != nil {

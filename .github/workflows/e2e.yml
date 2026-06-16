@@ -38,6 +38,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: VERSION=${{ github.sha }}
 
   # ── E2E matrix ─────────────────────────────────────────────────────────────
   test:

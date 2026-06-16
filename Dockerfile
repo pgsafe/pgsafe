@@ -7,7 +7,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /usr/local/bin/pgsafe ./cmd/pgsafe
+ARG VERSION=unknown
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o /usr/local/bin/pgsafe ./cmd/pgsafe
 
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
