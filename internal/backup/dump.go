@@ -33,8 +33,9 @@ func runDumpStream(ctx context.Context, dbURL, connName, dbName, format string, 
 	args := []string{
 		fmt.Sprintf("--format=%s", format),
 		"--verbose",
-		"--no-owner",
-		"--no-privileges",
+	}
+	if len(extraArgs) == 0 {
+		args = append(args, "--no-owner", "--no-privileges")
 	}
 	switch format {
 	case "custom":
