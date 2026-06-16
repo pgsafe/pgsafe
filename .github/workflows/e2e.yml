@@ -42,7 +42,7 @@ jobs:
 
   # ── E2E matrix ─────────────────────────────────────────────────────────────
   test:
-    name: "${{ matrix.mode }} / ${{ matrix.format }} / ${{ matrix.compression }} / enc:${{ matrix.encryption }}"
+    name: "${{ matrix.mode }} / ${{ matrix.format }} / ${{ matrix.compression }} / enc:${{ matrix.encryption }} / filter:${{ matrix.filter }}"
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -56,6 +56,12 @@ jobs:
         format:      [custom, plain, tar]
         compression: [none, gzip, bzip2, xz]
         encryption:  [false, true]
+        filter:      [none]
+        include:
+          - {mode: multi, format: custom, compression: none, encryption: false, filter: glob}
+          - {mode: multi, format: custom, compression: none, encryption: false, filter: regex}
+          - {mode: both,  format: custom, compression: none, encryption: false, filter: glob}
+          - {mode: both,  format: custom, compression: none, encryption: false, filter: regex}
 
     steps:
       - uses: actions/checkout@v6
@@ -126,6 +132,11 @@ jobs:
           if [[ "${{ matrix.encryption }}" == "true" ]]; then
             ARGS+=(-e ENCRYPTION_CIPHER_KEY="$CIPHER_KEY")
           fi
+          if [[ "${{ matrix.filter }}" == "glob" ]]; then
+            ARGS+=(-e MULTI_PROD_DATABASE_NAMES_GLOB=testdb)
+          elif [[ "${{ matrix.filter }}" == "regex" ]]; then
+            ARGS+=(-e "MULTI_PROD_DATABASE_NAMES_REGEX=^testdb$")
+          fi
           docker run "${ARGS[@]}" ${{ env.IMAGE }}:${{ github.sha }}
 
       # ── Download & verify ───────────────────────────────────────────────────
@@ -158,6 +169,9 @@ jobs:
           )
           if [[ "${{ matrix.encryption }}" == "true" ]]; then
             ARGS+=(--cipher-key "$CIPHER_KEY")
+          fi
+          if [[ "${{ matrix.filter }}" != "none" ]]; then
+            ARGS+=(--expect-no-db PROD/postgres)
           fi
           bash e2e/verify.sh "${ARGS[@]}"
 

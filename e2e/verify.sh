@@ -21,16 +21,18 @@ ENCRYPTION="false"
 CIPHER_KEY=""
 EXPECT_CONNS=""
 TESTDB_CONN=""
+EXPECT_NO_DBS=()   # each entry is "CONN/dbname"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --backup-dir)   BACKUP_DIR="$2";   shift 2 ;;
-        --format)       FORMAT="$2";       shift 2 ;;
-        --compression)  COMPRESSION="$2";  shift 2 ;;
-        --encryption)   ENCRYPTION="$2";   shift 2 ;;
-        --cipher-key)   CIPHER_KEY="$2";   shift 2 ;;
-        --expect-conns) EXPECT_CONNS="$2"; shift 2 ;;
-        --testdb-conn)  TESTDB_CONN="$2";  shift 2 ;;
+        --backup-dir)    BACKUP_DIR="$2";                  shift 2 ;;
+        --format)        FORMAT="$2";                      shift 2 ;;
+        --compression)   COMPRESSION="$2";                 shift 2 ;;
+        --encryption)    ENCRYPTION="$2";                  shift 2 ;;
+        --cipher-key)    CIPHER_KEY="$2";                  shift 2 ;;
+        --expect-conns)  EXPECT_CONNS="$2";                shift 2 ;;
+        --testdb-conn)   TESTDB_CONN="$2";                 shift 2 ;;
+        --expect-no-db)  EXPECT_NO_DBS+=("$2");            shift 2 ;;
         *) echo "unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -135,7 +137,18 @@ for conn in "${CONNS[@]}"; do
     ok "connection $conn → ${#files[@]} file(s)"
 done
 
-# 2. Decode and content-verify the testdb backup from the nominated connection.
+# 2. Assert that certain conn/db combinations were filtered out.
+for entry in "${EXPECT_NO_DBS[@]}"; do
+    conn="${entry%%/*}"
+    db="${entry#*/}"
+    shopt -s nullglob
+    bad=( "$BACKUP_DIR"/${conn}_${db}_* )
+    shopt -u nullglob
+    [[ ${#bad[@]} -eq 0 ]] || fail "found ${#bad[@]} backup(s) for $conn/$db — should have been filtered out"
+    ok "no backup for $conn/$db (correctly filtered)"
+done
+
+# 3. Decode and content-verify the testdb backup from the nominated connection.
 echo ""
 echo "==> decoding and verifying testdb (conn=$TESTDB_CONN)"
 
