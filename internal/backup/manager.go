@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -85,10 +86,15 @@ func (m *Manager) backupMulti(ctx context.Context, entry config.DatabaseEntry) [
 
 	slog.Info("discovered databases", "conn", entry.ConnName, "count", len(dbNames))
 
-	if entry.DatabasesGlob != "" {
+	switch {
+	case entry.DatabasesGlob != "":
 		dbNames = filterByGlob(dbNames, entry.DatabasesGlob)
 		slog.Info("databases after glob filter",
 			"conn", entry.ConnName, "glob", entry.DatabasesGlob, "count", len(dbNames))
+	case entry.DatabasesRegex != "":
+		dbNames = filterByRegex(dbNames, entry.DatabasesRegex)
+		slog.Info("databases after regex filter",
+			"conn", entry.ConnName, "regex", entry.DatabasesRegex, "count", len(dbNames))
 	}
 
 	if len(dbNames) == 0 {
@@ -265,6 +271,17 @@ func filterByGlob(names []string, pattern string) []string {
 	var out []string
 	for _, name := range names {
 		if matched, _ := filepath.Match(pattern, name); matched {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func filterByRegex(names []string, pattern string) []string {
+	re := regexp.MustCompile(pattern) // pattern already validated during config load
+	var out []string
+	for _, name := range names {
+		if re.MatchString(name) {
 			out = append(out, name)
 		}
 	}

@@ -25,9 +25,10 @@ func (e *ValidationError) Error() string {
 }
 
 type DatabaseEntry struct {
-	ConnName      string
-	URL           string
-	DatabasesGlob string // MULTI only; empty means back up all databases
+	ConnName       string
+	URL            string
+	DatabasesGlob  string // MULTI only; mutually exclusive with DatabasesRegex
+	DatabasesRegex string // MULTI only; mutually exclusive with DatabasesGlob
 }
 
 type Config struct {
@@ -220,7 +221,8 @@ func Load() (*Config, error) {
 }
 
 func parseDatabaseURLs() (multi, single []DatabaseEntry, errs []string) {
-	globs := map[string]string{} // connName → glob pattern
+	globs  := map[string]string{} // connName → glob pattern
+	regexes := map[string]string{} // connName → regex pattern
 
 	for _, env := range os.Environ() {
 		k, v, ok := strings.Cut(env, "=")
@@ -239,6 +241,20 @@ func parseDatabaseURLs() (multi, single []DatabaseEntry, errs []string) {
 				continue
 			}
 			globs[connName] = v
+			continue
+		}
+
+		if strings.HasPrefix(k, "MULTI_") && strings.HasSuffix(k, "_DATABASE_NAMES_REGEX") {
+			connName := strings.TrimSuffix(strings.TrimPrefix(k, "MULTI_"), "_DATABASE_NAMES_REGEX")
+			if !connNameRe.MatchString(connName) {
+				errs = append(errs, fmt.Sprintf("env var %s: CONNNAME %q must match [A-Z0-9]+", k, connName))
+				continue
+			}
+			if _, err := regexp.Compile(v); err != nil {
+				errs = append(errs, fmt.Sprintf("env var %s: invalid regex %q: %v", k, v, err))
+				continue
+			}
+			regexes[connName] = v
 			continue
 		}
 
@@ -270,7 +286,15 @@ func parseDatabaseURLs() (multi, single []DatabaseEntry, errs []string) {
 	}
 
 	for i := range multi {
-		multi[i].DatabasesGlob = globs[multi[i].ConnName]
+		conn := multi[i].ConnName
+		glob, hasGlob := globs[conn]
+		rx, hasRegex := regexes[conn]
+		if hasGlob && hasRegex {
+			errs = append(errs, fmt.Sprintf("MULTI_%s: DATABASE_NAMES_GLOB and DATABASE_NAMES_REGEX are mutually exclusive", conn))
+			continue
+		}
+		multi[i].DatabasesGlob = glob
+		multi[i].DatabasesRegex = rx
 	}
 
 	sort.Slice(multi, func(i, j int) bool { return multi[i].ConnName < multi[j].ConnName })

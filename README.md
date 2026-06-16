@@ -41,7 +41,8 @@ At least one of the following must be set. `CONNNAME` must match `[A-Z0-9]+`.
 | Variable | Description |
 |---|---|
 | `MULTI_<CONNNAME>_DATABASE_URL` | Connect to this PostgreSQL instance and back up **all** databases found in `pg_database` (excluding templates). The URL's database path is used only for the initial connection. |
-| `MULTI_<CONNNAME>_DATABASE_NAMES_GLOB` | Optional glob pattern (e.g. `app_*`) to filter which databases are backed up for the matching `MULTI_*` connection. Uses standard glob syntax (`*`, `?`, `[abc]`). When absent, all non-template databases are backed up. |
+| `MULTI_<CONNNAME>_DATABASE_NAMES_GLOB` | Optional glob pattern (e.g. `app_*`) to filter which databases are backed up for the matching `MULTI_*` connection. Uses standard glob syntax (`*`, `?`, `[abc]`). Mutually exclusive with `DATABASE_NAMES_REGEX`. |
+| `MULTI_<CONNNAME>_DATABASE_NAMES_REGEX` | Optional regular expression (e.g. `^app_`) to filter which databases are backed up. Full Go `regexp` syntax. Mutually exclusive with `DATABASE_NAMES_GLOB`. |
 | `SINGLE_<CONNNAME>_DATABASE_URL` | Back up **exactly the one** database named in the URL path. |
 
 Multiple variables of either type can be set simultaneously; pgsafe will back up all of them.
