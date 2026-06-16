@@ -24,8 +24,10 @@ func formatBytes(n int64) string {
 
 // Config groups all notifier settings passed to New.
 type Config struct {
-	SlackWebhookURL   string
-	SMTP              *SMTPConfig
+	SlackWebhookURL string
+	SlackEvents     string // "failure", "success", or "both"
+	SMTP            *SMTPConfig
+	SMTPEvents      string // "failure", "success", or "both"
 	WebhookSuccessURL string
 	WebhookFailureURL string
 }
@@ -37,7 +39,9 @@ type Config struct {
 // delivered.
 type Client struct {
 	slackURL          string
+	slackEvents       string
 	smtp              *smtpSender
+	smtpEvents        string
 	webhookSuccessURL string
 	webhookFailureURL string
 	http              *http.Client
@@ -47,7 +51,9 @@ type Client struct {
 func New(cfg Config) *Client {
 	return &Client{
 		slackURL:          cfg.SlackWebhookURL,
+		slackEvents:       cfg.SlackEvents,
 		smtp:              newSMTPSender(cfg.SMTP),
+		smtpEvents:        cfg.SMTPEvents,
 		webhookSuccessURL: cfg.WebhookSuccessURL,
 		webhookFailureURL: cfg.WebhookFailureURL,
 		http:              &http.Client{Timeout: 10 * time.Second},
@@ -89,10 +95,10 @@ type DBInfo struct {
 // NotifySuccess fires all configured channels asynchronously to report a
 // successful backup run.
 func (c *Client) NotifySuccess(startedAt, finishedAt time.Time, databases []DBInfo) {
-	if c.slackURL != "" {
+	if c.slackURL != "" && wantsSuccess(c.slackEvents) {
 		c.dispatch(func() { c.sendSlackSuccess(startedAt, finishedAt, databases) })
 	}
-	if c.smtp != nil {
+	if c.smtp != nil && wantsSuccess(c.smtpEvents) {
 		c.dispatch(func() { c.smtp.sendSuccess(startedAt, finishedAt, databases) })
 	}
 	if c.webhookSuccessURL != "" {
@@ -104,16 +110,19 @@ func (c *Client) NotifySuccess(startedAt, finishedAt time.Time, databases []DBIn
 // failed backup run. failures contains one entry per failed database in
 // "conn/db: error" form.
 func (c *Client) NotifyFailure(startedAt, finishedAt time.Time, failures []string) {
-	if c.slackURL != "" {
+	if c.slackURL != "" && wantsFailure(c.slackEvents) {
 		c.dispatch(func() { c.sendSlackFailure(startedAt, finishedAt, failures) })
 	}
-	if c.smtp != nil {
+	if c.smtp != nil && wantsFailure(c.smtpEvents) {
 		c.dispatch(func() { c.smtp.sendFailure(startedAt, finishedAt, failures) })
 	}
 	if c.webhookFailureURL != "" {
 		c.dispatch(func() { c.postWebhookFailure(startedAt, finishedAt, failures) })
 	}
 }
+
+func wantsSuccess(events string) bool { return events == "success" || events == "all" }
+func wantsFailure(events string) bool { return events == "failure" || events == "all" }
 
 func (c *Client) dispatch(fn func()) {
 	c.wg.Add(1)

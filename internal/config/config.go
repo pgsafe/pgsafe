@@ -49,6 +49,7 @@ type Config struct {
 	EncryptionIterations   int
 
 	SlackWebhookURL string
+	SlackEvents     string // "failure", "success", or "both"
 
 	WebhookSuccessURL string
 	WebhookFailureURL string
@@ -61,6 +62,7 @@ type Config struct {
 	SMTPFromName  string
 	SMTPFromEmail string
 	SMTPToEmail   string
+	SMTPEvents    string // "failure", "success", or "both"
 }
 
 func Load() (*Config, error) {
@@ -74,6 +76,8 @@ func Load() (*Config, error) {
 	v.SetDefault("ENCRYPTION_ITERATIONS", 100000)
 	v.SetDefault("SMTP_TLS_MODE", "starttls")
 	v.SetDefault("SMTP_PORT", 587)
+	v.SetDefault("SLACK_EVENTS", "failure")
+	v.SetDefault("SMTP_EVENTS", "failure")
 
 	var errs []string
 
@@ -151,6 +155,20 @@ func Load() (*Config, error) {
 		}
 	}
 
+	slackEvents := v.GetString("SLACK_EVENTS")
+	switch slackEvents {
+	case "failure", "success", "both":
+	default:
+		errs = append(errs, fmt.Sprintf("SLACK_EVENTS must be one of: failure, success, all (got %q)", slackEvents))
+	}
+
+	smtpEvents := v.GetString("SMTP_EVENTS")
+	switch smtpEvents {
+	case "failure", "success", "both":
+	default:
+		errs = append(errs, fmt.Sprintf("SMTP_EVENTS must be one of: failure, success, all (got %q)", smtpEvents))
+	}
+
 	multiDBs, singleDBs, dbErrs := parseDatabaseURLs()
 	errs = append(errs, dbErrs...)
 
@@ -187,6 +205,7 @@ func Load() (*Config, error) {
 		WebhookFailureURL: v.GetString("WEBHOOK_FAILURE_URL"),
 
 		SlackWebhookURL: v.GetString("SLACK_WEBHOOK_URL"),
+		SlackEvents:     slackEvents,
 
 		SMTPHost:      smtpHost,
 		SMTPPort:      smtpPort,
@@ -196,6 +215,7 @@ func Load() (*Config, error) {
 		SMTPFromName:  v.GetString("SMTP_FROM_NAME"),
 		SMTPFromEmail: smtpFromEmail,
 		SMTPToEmail:   smtpToEmail,
+		SMTPEvents:    smtpEvents,
 	}, nil
 }
 

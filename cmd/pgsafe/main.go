@@ -54,7 +54,9 @@ func main() {
 	}
 	notifier := notify.New(notify.Config{
 		SlackWebhookURL:   cfg.SlackWebhookURL,
+		SlackEvents:       cfg.SlackEvents,
 		SMTP:              smtpCfg,
+		SMTPEvents:        cfg.SMTPEvents,
 		WebhookSuccessURL: cfg.WebhookSuccessURL,
 		WebhookFailureURL: cfg.WebhookFailureURL,
 	})

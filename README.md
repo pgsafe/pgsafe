@@ -119,6 +119,7 @@ In job mode (`RUN_MODE=job`) pgsafe waits up to 5 minutes after the backup compl
 | Variable | Default | Description |
 |---|---|---|
 | `SLACK_WEBHOOK_URL` | — | Incoming webhook URL. When unset, Slack notifications are disabled. |
+| `SLACK_EVENTS` | `failure` | Which events trigger a Slack message. One of: `failure`, `success`, `all`. |
 
 #### SMTP
 
@@ -134,6 +135,7 @@ SMTP is enabled by setting `SMTP_HOST`.
 | `SMTP_FROM_NAME` | — | Display name in the `From` header, e.g. `pgsafe`. |
 | `SMTP_FROM_EMAIL` | — | Sender address (required when `SMTP_HOST` is set). |
 | `SMTP_TO_EMAIL` | — | Recipient address (required when `SMTP_HOST` is set). |
+| `SMTP_EVENTS` | `failure` | Which events trigger an email. One of: `failure`, `success`, `all`. |
 
 #### OpenTelemetry (OTLP)
 
