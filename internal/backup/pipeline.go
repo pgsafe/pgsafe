@@ -152,6 +152,7 @@ func (p *Pipeline) applyEncryption(ctx context.Context, cipherKey string, iterat
 	if err != nil {
 		return fmt.Errorf("openssl stdout pipe: %w", err)
 	}
+	slog.Debug("starting subprocess", "cmd", "openssl", "args", args)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start openssl: %w", err)
 	}
@@ -209,6 +210,7 @@ func cmdStream(ctx context.Context, src io.Reader, name string, args ...string) 
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdout pipe for %s: %w", name, err)
 	}
+	slog.Debug("starting subprocess", "cmd", name, "args", args)
 	if err := cmd.Start(); err != nil {
 		return nil, nil, fmt.Errorf("start %s: %w", name, err)
 	}
