@@ -95,6 +95,7 @@ Objects are uploaded to `<CONNNAME>/<dbname>/<timestamp>.<ext>` inside the bucke
 | Variable | Default | Description |
 |---|---|---|
 | `COMPRESSION_METHOD` | `none` | Compress the dump before upload. One of: `none`, `gzip`, `bzip2`, `xz`. Applied in-memory/as-stream — no extra disk space needed. |
+| `COMPRESSION_JOBS` | `1` | Parallel compression workers. When `>1`, uses `pigz` (gzip), `pbzip2` (bzip2), or `xz -T` (xz) for multi-threaded compression. |
 | `ENCRYPTION_CIPHER_KEY` | — | Passphrase for AES-256-CBC encryption (via OpenSSL). When set, the upload is encrypted in-stream. Appends `.enc` to the S3 object key. |
 | `ENCRYPTION_ITERATIONS` | `100000` | PBKDF2 iteration count passed to `openssl enc -iter`. Higher values increase brute-force resistance at the cost of encrypt/decrypt time. Only relevant when `ENCRYPTION_CIPHER_KEY` is set. |
 

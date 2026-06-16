@@ -33,23 +33,23 @@ type Pipeline struct {
 // wrapPipeline wraps an existing ReadCloser (e.g. pg_dump stdout) with the
 // compression/encryption chain. waitFn is prepended so it is called last on
 // Close, after all downstream processes have already exited.
-func wrapPipeline(ctx context.Context, src io.ReadCloser, waitFn func() error, compressionMethod, cipherKey string, iterations int) (*Pipeline, error) {
+func wrapPipeline(ctx context.Context, src io.ReadCloser, waitFn func() error, compressionAlgorithm, cipherKey string, compressionJobs, iterations int) (*Pipeline, error) {
 	p := &Pipeline{
 		reader: src,
 		waits:  []func() error{waitFn},
 	}
-	if err := p.build(ctx, compressionMethod, cipherKey, iterations); err != nil {
+	if err := p.build(ctx, compressionAlgorithm, cipherKey, compressionJobs, iterations); err != nil {
 		p.Close()
 		return nil, err
 	}
 	return p, nil
 }
 
-func (p *Pipeline) build(ctx context.Context, compressionMethod, cipherKey string, iterations int) error {
-	if compressionMethod != "" && compressionMethod != "none" {
-		ext, err := p.applyCompression(ctx, compressionMethod)
+func (p *Pipeline) build(ctx context.Context, compressionAlgorithm, cipherKey string, compressionJobs, iterations int) error {
+	if compressionAlgorithm != "" && compressionAlgorithm != "none" {
+		ext, err := p.applyCompression(ctx, compressionAlgorithm, compressionJobs)
 		if err != nil {
-			return fmt.Errorf("setup compression (%s): %w", compressionMethod, err)
+			return fmt.Errorf("setup compression (%s): %w", compressionAlgorithm, err)
 		}
 		p.s3Ext += ext
 	}
@@ -90,15 +90,36 @@ func (p *Pipeline) Close() error {
 	return joinErrors(errs)
 }
 
-func (p *Pipeline) applyCompression(ctx context.Context, method string) (string, error) {
-	switch method {
+func (p *Pipeline) applyCompression(ctx context.Context, algorithm string, jobs int) (string, error) {
+	jobs_s := strconv.Itoa(jobs)
+	switch algorithm {
 	case "gzip":
-		r, wait := gzipStream(p.reader)
+		var r io.ReadCloser
+		var wait func() error
+		var err error
+		if jobs > 1 {
+			r, wait, err = cmdStream(ctx, p.reader, "pigz", "-c", "-p", jobs_s)
+		} else {
+			r, wait = gzipStream(p.reader)
+		}
+		if err != nil {
+			return "", err
+		}
 		p.reader = r
 		p.waits = append(p.waits, wait)
 		return ".gz", nil
 	case "bzip2":
-		r, wait, err := cmdStream(ctx, p.reader, "bzip2", "-c")
+		var args []string
+		if jobs > 1 {
+			args = []string{"-c", "-p", jobs_s}
+		} else {
+			args = []string{"-c"}
+		}
+		cmd := "bzip2"
+		if jobs > 1 {
+			cmd = "pbzip2"
+		}
+		r, wait, err := cmdStream(ctx, p.reader, cmd, args...)
 		if err != nil {
 			return "", err
 		}
@@ -106,7 +127,7 @@ func (p *Pipeline) applyCompression(ctx context.Context, method string) (string,
 		p.waits = append(p.waits, wait)
 		return ".bz2", nil
 	case "xz":
-		r, wait, err := cmdStream(ctx, p.reader, "xz", "-c")
+		r, wait, err := cmdStream(ctx, p.reader, "xz", "-T", jobs_s, "-c")
 		if err != nil {
 			return "", err
 		}
@@ -114,7 +135,7 @@ func (p *Pipeline) applyCompression(ctx context.Context, method string) (string,
 		p.waits = append(p.waits, wait)
 		return ".xz", nil
 	default:
-		return "", fmt.Errorf("unsupported compression method: %s", method)
+		return "", fmt.Errorf("unsupported compression algorithm: %s", algorithm)
 	}
 }
 

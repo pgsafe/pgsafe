@@ -45,7 +45,8 @@ type Config struct {
 
 	DumpFormat             string // "plain", "custom", or "tar"
 	DumpJobs               int    // parallel dump workers; only used for tar format
-	CompressionMethod      string
+	CompressionAlgorithm   string
+	CompressionJobs        int
 	EncryptionCipherKey    string
 	EncryptionIterations   int
 
@@ -72,6 +73,7 @@ func Load() (*Config, error) {
 	v.SetDefault("DUMP_FORMAT", "custom")
 	v.SetDefault("DUMP_JOBS", 1)
 	v.SetDefault("COMPRESSION_METHOD", "none")
+	v.SetDefault("COMPRESSION_JOBS", 1)
 	v.SetDefault("S3_PATH_STYLE", false)
 	v.SetDefault("S3_MULTIPART_PART_SIZE", 64)
 	v.SetDefault("ENCRYPTION_ITERATIONS", 100000)
@@ -121,11 +123,16 @@ func Load() (*Config, error) {
 		errs = append(errs, fmt.Sprintf("DUMP_JOBS must be >= 1 (got %d)", dumpJobs))
 	}
 
-	compressionMethod := v.GetString("COMPRESSION_METHOD")
-	switch compressionMethod {
+	compressionAlgorithm := v.GetString("COMPRESSION_METHOD")
+	switch compressionAlgorithm {
 	case "none", "gzip", "bzip2", "xz":
 	default:
-		errs = append(errs, fmt.Sprintf("COMPRESSION_METHOD must be one of: none, gzip, bzip2, xz (got %q)", compressionMethod))
+		errs = append(errs, fmt.Sprintf("COMPRESSION_METHOD must be one of: none, gzip, bzip2, xz (got %q)", compressionAlgorithm))
+	}
+
+	compressionJobs := v.GetInt("COMPRESSION_JOBS")
+	if compressionJobs < 1 {
+		errs = append(errs, fmt.Sprintf("COMPRESSION_JOBS must be >= 1 (got %d)", compressionJobs))
 	}
 
 	encryptionIterations := v.GetInt("ENCRYPTION_ITERATIONS")
@@ -199,7 +206,8 @@ func Load() (*Config, error) {
 		S3MultipartPartSizeMB: s3MultipartPartSizeMB,
 		DumpFormat:          dumpFormat,
 		DumpJobs:            dumpJobs,
-		CompressionMethod:   compressionMethod,
+		CompressionAlgorithm: compressionAlgorithm,
+		CompressionJobs:      compressionJobs,
 		EncryptionCipherKey:  v.GetString("ENCRYPTION_CIPHER_KEY"),
 		EncryptionIterations: encryptionIterations,
 		WebhookSuccessURL: v.GetString("WEBHOOK_SUCCESS_URL"),

@@ -53,7 +53,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		"multi_connections", len(m.cfg.MultiDatabases),
 		"single_connections", len(m.cfg.SingleDatabases),
 		"format", m.cfg.DumpFormat,
-		"compression", m.cfg.CompressionMethod,
+		"compression", m.cfg.CompressionAlgorithm,
 		"encryption", m.cfg.EncryptionCipherKey != "",
 	)
 
@@ -205,7 +205,7 @@ func (m *Manager) openBackupPipeline(ctx context.Context, base, connName, dbName
 	if err != nil {
 		return nil, "", noop, fmt.Errorf("pg_dump (%s): %w", m.cfg.DumpFormat, err)
 	}
-	p, err := wrapPipeline(ctx, r, wait, m.cfg.CompressionMethod, m.cfg.EncryptionCipherKey, m.cfg.EncryptionIterations)
+	p, err := wrapPipeline(ctx, r, wait, m.cfg.CompressionAlgorithm, m.cfg.EncryptionCipherKey, m.cfg.CompressionJobs, m.cfg.EncryptionIterations)
 	if err != nil {
 		return nil, "", noop, err
 	}
