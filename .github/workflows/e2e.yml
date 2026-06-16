@@ -122,6 +122,16 @@ jobs:
           - {mode: single, format: custom, compression: xz,    encryption: false, filter: none, compression_jobs: 4}
 
     steps:
+      - name: Create job network
+        run: |
+          NET="pgsafe-${{ github.run_id }}-${{ strategy.job-index }}"
+          PG="pg-${{ github.run_id }}-${{ strategy.job-index }}"
+          MINIO="minio-${{ github.run_id }}-${{ strategy.job-index }}"
+          docker network create "$NET"
+          echo "NET=$NET"     >> "$GITHUB_ENV"
+          echo "PG=$PG"       >> "$GITHUB_ENV"
+          echo "MINIO=$MINIO" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v6
 
       - uses: docker/login-action@v4
@@ -137,29 +147,27 @@ jobs:
 
       - name: Start MinIO
         run: |
-          docker run -d --name minio \
-            -p 9000:9000 \
+          docker run -d --name "$MINIO" --network "$NET" \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
             minio/minio server /data
-          until curl -sf http://localhost:9000/minio/health/live; do sleep 2; done
+          until docker exec "$MINIO" curl -sf http://localhost:9000/minio/health/live; do sleep 2; done
 
       - name: Create MinIO bucket
         run: |
-          docker run --rm --network host \
+          docker run --rm --network "$NET" \
             --entrypoint /bin/sh minio/mc -c \
-            'mc alias set s http://localhost:9000 minioadmin minioadmin --quiet && mc mb s/pgsafe-test'
+            "mc alias set s http://$MINIO:9000 minioadmin minioadmin --quiet && mc mb s/pgsafe-test"
 
       - name: Start PostgreSQL
         run: |
-          docker run -d --name postgres \
-            -p 5432:5432 \
+          docker run -d --name "$PG" --network "$NET" \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
             -e POSTGRES_DB=testdb \
             -v "$GITHUB_WORKSPACE/e2e/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro" \
             postgres:18-alpine
-          until docker exec postgres pg_isready -U postgres; do sleep 2; done
+          until docker exec "$PG" psql -U postgres -d testdb -c '\q' 2>/dev/null; do sleep 2; done
 
       # ── Run pgsafe ──────────────────────────────────────────────────────────
 
@@ -168,8 +176,8 @@ jobs:
           CIPHER_KEY: test-e2e-cipher-key-for-aes256!!
         run: |
           ARGS=(
-            --rm --network host
-            -e S3_ENDPOINT=http://localhost:9000
+            --rm --network "$NET"
+            -e S3_ENDPOINT="http://$MINIO:9000"
             -e S3_BUCKET=pgsafe-test
             -e S3_REGION=us-east-1
             -e S3_ACCESS_KEY_ID=minioadmin
@@ -180,10 +188,10 @@ jobs:
             -e COMPRESSION_JOBS=${{ matrix.compression_jobs || '1' }}
           )
           if [[ "${{ matrix.mode }}" != "multi" ]]; then
-            ARGS+=(-e SINGLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/testdb)
+            ARGS+=(-e "SINGLE_TEST_DATABASE_URL=postgres://postgres:postgres@$PG:5432/testdb")
           fi
           if [[ "${{ matrix.mode }}" != "single" ]]; then
-            ARGS+=(-e MULTI_PROD_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres)
+            ARGS+=(-e "MULTI_PROD_DATABASE_URL=postgres://postgres:postgres@$PG:5432/postgres")
           fi
           if [[ "${{ matrix.encryption }}" == "true" ]]; then
             ARGS+=(-e ENCRYPTION_CIPHER_KEY="$CIPHER_KEY")
@@ -200,10 +208,10 @@ jobs:
       - name: Download backups from MinIO
         run: |
           mkdir -p /tmp/backups
-          docker run --rm --network host \
+          docker run --rm --network "$NET" \
             -v /tmp/backups:/out \
             --entrypoint /bin/sh minio/mc -c \
-            'mc alias set s http://localhost:9000 minioadmin minioadmin --quiet && mc mirror s/pgsafe-test /out'
+            "mc alias set s http://$MINIO:9000 minioadmin minioadmin --quiet && mc mirror s/pgsafe-test /out"
 
       - name: Verify backups
         env:
