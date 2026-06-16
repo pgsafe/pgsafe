@@ -17,6 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}
 FROM postgres:18
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
       curl \
       pigz \
       pbzip2 \
