@@ -12,18 +12,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}
 
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
-# postgres:18-alpine provides pg_dump and all client libraries.
+# postgres:18 (Debian) provides pg_dump and all client libraries.
 # We add compression tools and supercronic on top.
-FROM postgres:18-alpine
+FROM postgres:18
 
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
-      gzip \
       pigz \
-      bzip2 \
-      lbzip2 \
-      xz \
-      openssl
+      pbzip2 \
+      xz-utils \
+      openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # supercronic — drop-in cron for containers (handles signals correctly).
 ARG SUPERCRONIC_VERSION=0.2.46

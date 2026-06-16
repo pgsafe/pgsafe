@@ -79,8 +79,8 @@ jobs:
       - name: Pull images
         run: |
           docker pull ${{ env.IMAGE }}:${{ github.sha }}
-          # pgsafe is FROM postgres:18-alpine so this only fetches the manifest
-          docker pull postgres:18-alpine
+          # pgsafe is FROM postgres:18 so this only fetches the manifest
+          docker pull postgres:18
 
       # ── Infrastructure ──────────────────────────────────────────────────────
 

@@ -112,7 +112,7 @@ func (p *Pipeline) applyCompression(ctx context.Context, algorithm string, jobs 
 		var cmd string
 		var args []string
 		if jobs > 1 {
-			cmd, args = "lbzip2", []string{"-c", "-n", jobs_s}
+			cmd, args = "pbzip2", []string{"-c", "-p", jobs_s}
 		} else {
 			cmd, args = "bzip2", []string{"-c"}
 		}
